@@ -1,5 +1,6 @@
 /* Product focus: the garment comes forward on its own transparent canvas while the shop
-   behind is blurred. Drag sideways to turn it 360°, drag it down into the basket.
+   behind is blurred. Drag sideways to tilt it (never edge-on); a longer drag or the
+   Față/Spate switch flips it to the other side. Drag it down into the basket.
    Exposed as window.STAGE. */
 (function () {
   'use strict';
@@ -12,12 +13,14 @@
     hint: $('p-hint'), brand: $('p-brand'), name: $('p-name'), price: $('p-price'), rows: $('p-rows'),
     gallery: $('p-gallery'), galleryWrap: $('p-gallery-wrap'), note: $('p-note'),
     lb: $('lightbox'), lbImg: $('lb-img'), lbCap: $('lb-cap'), lbCount: $('lb-count'),
-    lbClose: $('lb-close'), lbPrev: $('lb-prev'), lbNext: $('lb-next')
+    lbClose: $('lb-close'), lbPrev: $('lb-prev'), lbNext: $('lb-next'),
+    faces: $('p-faces'), fFront: $('p-face-front'), fBack: $('p-face-back')
   };
 
   var renderer = null, scene, camera, root = null, product = null;
   var api = { onBack: null, onAdd: null, inCart: function () { return false; } };
-  var rot = { y: 0, vel: 0 }, intro = 0, open = false, raf = 0, last = 0, t = 0;
+  var rot = { y: 0, vel: 0, face: 0, target: 0, tilt: 0 }, intro = 0, open = false, raf = 0, last = 0, t = 0;
+  var TILT = 0.55, FLIP_AT = 0.3;
   var carry = null, dropping = null;
 
   function init() {
@@ -64,7 +67,11 @@
     document.body.classList.add('is-focused');
     resize();
     if (root) { scene.remove(root); root = null; }
-    rot.y = -0.7; rot.vel = 0; intro = 0; dropping = null; carry = null;
+    rot.y = -0.5; rot.vel = 0; rot.face = 0; rot.target = 0; rot.tilt = 0; intro = 0; dropping = null; carry = null;
+    var two = hasBack(p);
+    el.faces.hidden = !two;
+    setFaceUI();
+    el.hint.innerHTML = two ? 'Trage stânga–dreapta ca s-o întorci pe spate<br>sau trage-o în jos, în coș' : 'Trage stânga–dreapta ca s-o înclini<br>sau trage-o în jos, în coș';
     var g = FIG.garment(p, { tagScale: 1.25 });
     g.visible = false;
     root = g;
@@ -113,7 +120,8 @@
     });
     el.gallery.innerHTML = '';
     el.galleryWrap.hidden = !p.photos.length;
-    el.note.hidden = p.real;
+    el.note.hidden = !p.sample && p.real;
+    el.note.textContent = p.sample ? 'Produs de test, doar pentru preview. Poza e preluată din ' + p.source + ' și nu se vinde.' : 'Haină demonstrativă. Pozele și detaliile reale apar când adaugi marfa ta.';
     p.photos.forEach(function (ph, i) {
       var b = document.createElement('button');
       b.type = 'button';
@@ -126,6 +134,21 @@
       el.gallery.appendChild(b);
     });
     el.sheet.scrollTop = 0;
+  }
+
+  function hasBack(p) { return !!(p && (p.texture && p.texture.back) || (p && !p.texture && !p.real)); }
+  function setFaceUI() {
+    el.fFront.classList.toggle('is-on', rot.face === 0);
+    el.fBack.classList.toggle('is-on', rot.face === 1);
+    el.fFront.setAttribute('aria-pressed', rot.face === 0);
+    el.fBack.setAttribute('aria-pressed', rot.face === 1);
+  }
+  function flip(toFace, dir) {
+    if (!product || !hasBack(product) || toFace === rot.face) return;
+    rot.face = toFace;
+    rot.target += Math.PI * (dir || 1);
+    setFaceUI();
+    hideHint();
   }
 
   function updateBasket() {
@@ -143,13 +166,18 @@
       intro = Math.min(1, intro + dt / (reduce ? 0.2 : 0.9));
       var e = 1 - Math.pow(1 - intro, 3);
       if (!carry && !dropping) {
-        if (intro < 1 && !rot.dragging) rot.y += (0 - rot.y) * Math.min(1, dt * 3.2);
-        if (!rot.dragging) { rot.y += rot.vel * dt; rot.vel *= Math.pow(0.04, dt); }
+        // spring towards the shown face plus a little tilt; never rests edge-on
+        var sway = rot.dragging || reduce ? 0 : Math.sin(t * 0.7) * 0.1 * Math.min(1, intro * 2);
+        var goal = rot.target + rot.tilt + sway;
+        var prevY = rot.y;
+        rot.vel += ((goal - rot.y) * 60 - rot.vel * 12) * dt;
+        rot.y += rot.vel * dt;
+        if (rot.dragging) { rot.y = prevY + (goal - prevY) * Math.min(1, dt * 18); rot.vel = (rot.y - prevY) / Math.max(dt, 0.001); }
         root.position.set(0, (1 - e) * -0.15, 0);
         root.scale.setScalar(0.75 + 0.25 * e);
       }
       root.rotation.y = rot.y;
-      if (root.userData.body) FIG.swing(root, dt, -rot.vel * 0.35, t);
+      if (root.userData.body) FIG.swing(root, dt, -rot.vel * 0.12, t);
       if (dropping) {
         dropping.t += dt / 0.55;
         var p = Math.min(1, dropping.t), ep = p * p;
@@ -199,11 +227,11 @@
         hideHint();
       }
       if (drag.mode === 'rotate') {
-        var now = performance.now(), ddx = e.clientX - drag.lx;
-        rot.y += ddx * 0.012;
-        rot.vel = rot.vel * 0.6 + (ddx * 0.012) / Math.max(0.008, (now - drag.lt) / 1000) * 0.4;
+        var raw = (e.clientX - drag.x) * 0.006;
+        // rubber band past the tilt limit
+        rot.tilt = Math.abs(raw) <= TILT * 0.7 ? raw : Math.sign(raw) * (TILT * 0.7 + (TILT * 0.3) * (1 - Math.exp(-(Math.abs(raw) - TILT * 0.7) / (TILT * 0.3))));
         rot.dragging = true;
-        drag.lx = e.clientX; drag.lt = now;
+        drag.lx = e.clientX; drag.lt = performance.now();
       } else if (drag.mode === 'carry') {
         var w = worldAt(e.clientX, e.clientY);
         var w0 = worldAt(drag.x, drag.y);
@@ -217,6 +245,11 @@
       if (!drag) return;
       var d = drag; drag = null;
       rot.dragging = false;
+      if (d.mode === 'rotate') {
+        var tl = rot.tilt;
+        rot.tilt = 0;
+        if (Math.abs(tl) > FLIP_AT && product && hasBack(product)) flip(1 - rot.face, tl > 0 ? 1 : -1);
+      }
       if (d.mode === 'carry') {
         var b = basketRect();
         var inside = e && e.clientX > b.x && e.clientX < b.x + b.w && e.clientY > b.y && e.clientY < b.y + b.h;
@@ -229,6 +262,8 @@
     el.canvas.addEventListener('pointercancel', function () { end(null); });
 
     el.back.addEventListener('click', function () { if (api.onBack) api.onBack(); });
+    el.fFront.addEventListener('click', function () { flip(0, -1); });
+    el.fBack.addEventListener('click', function () { flip(1, 1); });
     el.basket.addEventListener('click', function () { if (!dropping && product && !api.inCart(product.id)) startDrop(); });
 
     // lightbox
@@ -243,7 +278,7 @@
         return;
       }
       if (open && e.key === 'Escape' && api.onBack) api.onBack();
-      if (open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { rot.vel += e.key === 'ArrowLeft' ? -4 : 4; hideHint(); }
+      if (open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { if (hasBack(product)) flip(1 - rot.face, e.key === 'ArrowLeft' ? -1 : 1); else rot.vel += e.key === 'ArrowLeft' ? -3 : 3; hideHint(); }
     });
     bindZoom();
   }

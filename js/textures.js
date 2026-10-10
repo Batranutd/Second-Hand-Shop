@@ -130,29 +130,54 @@
     });
   };
 
+  /* Consumer-information notice taped inside the door glass (A-format sheet) */
   TX.legalPoster = function () {
-    return make(440, 600, function (g, w, h) {
-      rr(g, 8, 8, w - 16, h - 16, 18);
-      g.fillStyle = C.paper; g.fill();
-      g.fillStyle = C.teal;
-      g.fillRect(8, 8, w - 16, 112);
-      g.fillStyle = C.white;
+    return make(600, 820, function (g, w, h) {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, w, h);
+      g.strokeStyle = '#1d2b30'; g.lineWidth = 6;
+      g.strokeRect(18, 18, w - 36, h - 36);
+      g.lineWidth = 2;
+      g.strokeRect(30, 30, w - 60, h - 60);
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = '800 48px ' + F_DISPLAY;
-      g.fillText('INFO LEGALE', w / 2, 66);
+      // crest-like round seal
+      g.beginPath(); g.arc(w / 2, 104, 44, 0, Math.PI * 2); g.fillStyle = '#1f3f6e'; g.fill();
+      g.beginPath(); g.arc(w / 2, 104, 36, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = '#f5d36b'; g.stroke();
+      g.fillStyle = '#f5d36b'; g.font = '800 30px ' + F_UI; g.fillText('§', w / 2, 106);
+      g.fillStyle = '#1d2b30';
+      g.font = '800 36px ' + F_UI;
+      spaced(g, 'INFORMAȚII', w / 2, 184, 4);
+      g.font = '800 30px ' + F_UI;
+      spaced(g, 'PENTRU CONSUMATORI', w / 2, 224, 3);
+      g.fillStyle = '#1f3f6e'; g.fillRect(70, 254, w - 140, 4);
       g.textAlign = 'left';
-      g.font = '700 33px ' + F_UI;
-      ['Termeni și condiții', 'Confidențialitate', 'Retur în 14 zile', 'ANPC · SAL'].forEach(function (t, i) {
-        var y = 184 + i * 80;
-        g.fillStyle = C.teal;
-        g.beginPath(); g.arc(46, y, 9, 0, Math.PI * 2); g.fill();
-        g.fillStyle = C.ink;
-        g.fillText(t, 70, y + 2);
+      var rows = [
+        ['1.', 'Date de identificare vânzător'],
+        ['2.', 'Termeni și condiții'],
+        ['3.', 'Politica de confidențialitate'],
+        ['4.', 'Dreptul de retur în 14 zile'],
+        ['5.', 'ANPC · SAL · SOL']
+      ];
+      rows.forEach(function (r, i) {
+        var y = 304 + i * 62;
+        g.font = '800 28px ' + F_UI; g.fillStyle = '#1f3f6e'; g.fillText(r[0], 64, y);
+        g.font = '600 28px ' + F_UI; g.fillStyle = '#1d2b30'; g.fillText(r[1], 104, y);
+        g.fillStyle = 'rgba(29,43,48,.15)'; g.fillRect(64, y + 26, w - 128, 2);
       });
       g.textAlign = 'center';
-      g.font = '700 26px ' + F_UI;
-      g.fillStyle = C.coral;
-      g.fillText('atinge pentru detalii', w / 2, h - 52);
+      // two framed boxes in the style of the ANPC dispute-resolution notices
+      [['ANPC', 'SAL'], ['UE', 'SOL']].forEach(function (b, i) {
+        var bx = 70 + i * ((w - 140) / 2 + 10), bw = (w - 140) / 2 - 10, by = 628;
+        g.lineWidth = 3; g.strokeStyle = '#1f3f6e'; g.strokeRect(bx, by, bw, 70);
+        g.fillStyle = '#1f3f6e'; g.fillRect(bx, by, 70, 70);
+        g.fillStyle = '#ffffff'; g.font = '800 22px ' + F_UI; g.fillText(b[0], bx + 35, by + 36);
+        g.fillStyle = '#1f3f6e'; g.font = '800 30px ' + F_UI; g.fillText(b[1], bx + 70 + (bw - 70) / 2, by + 37);
+      });
+      g.fillStyle = '#e8735a';
+      g.font = '800 24px ' + F_UI;
+      g.fillText('ATINGE PENTRU A CITI', w / 2, 748);
+      function tape(x, y, r) { g.save(); g.translate(x, y); g.rotate(r); g.fillStyle = 'rgba(235, 225, 190, .85)'; g.fillRect(-46, -14, 92, 28); g.restore(); }
+      tape(52, 20, -0.5); tape(w - 52, 20, 0.5);
     });
   };
 

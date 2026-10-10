@@ -175,8 +175,8 @@
   var PHOTO = {};
   function photoAssets(product) {
     if (PHOTO[product.id]) return PHOTO[product.id];
-    PHOTO[product.id] = Promise.all([loadImage(product.texture.front), loadImage(product.texture.back)]).then(function (ims) {
-      var f = photoCanvas(ims[0]), b = photoCanvas(ims[1]);
+    PHOTO[product.id] = Promise.all([loadImage(product.texture.front), product.texture.back ? loadImage(product.texture.back) : null]).then(function (ims) {
+      var f = photoCanvas(ims[0]), b = ims[1] ? photoCanvas(ims[1]) : f;
       var geo = pillowGeometry(f.alpha, product.texture.width, 0.04);
       // the front silhouette cuts the mesh; both sides draw from the filled canvases
       var alphaTex = TX.tex(f.alpha);
@@ -264,7 +264,7 @@
       m.userData.garmentRoot = root;
       body.add(m);
       root.userData.mesh = m;
-      if (kind !== 'jeans' || product.real) body.add(hanger());
+      if (kind !== 'jeans' && kind !== 'skirt') body.add(hanger());
       else {
         var clip = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.022, 0.03), mat('#dcc6a6', 0.5));
         clip.position.y = 0.008;

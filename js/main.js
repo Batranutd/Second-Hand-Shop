@@ -206,8 +206,8 @@
       pivot.add(item);
       doorItems.push({ mesh: item, halo: halo, action: action, hover: false });
     }
-    pressable(new THREE.MeshStandardMaterial({ map: TX.legalPoster(), roughness: 0.8, transparent: true }), 0.23, 0.314, 0.31, 1.2, false, openLegal);
-    pressable(new THREE.MeshStandardMaterial({ map: TX.skipSticker(), roughness: 0.5, transparent: true }), 0.21, 0.21, 0.72, 1.14, true, skipIntro);
+    pressable(new THREE.MeshStandardMaterial({ map: TX.legalPoster(), roughness: 0.8, transparent: true }), 0.36, 0.492, 0.36, 1.3, false, openLegal);
+    pressable(new THREE.MeshStandardMaterial({ map: TX.skipSticker(), roughness: 0.5, transparent: true }), 0.22, 0.22, 0.8, 1.16, true, skipIntro);
 
     var handle = new THREE.Group();
     handle.position.set(W - 0.06, 1.3, 0);
@@ -282,7 +282,7 @@
   }
 
   /* ---------------- shelves, stands, till ---------------- */
-  function inCartHidden(g) { return cart.indexOf(g.userData.product.id) >= 0; }
+  function inCartHidden(g) { var id = g.userData.product.id; return cart.indexOf(id) >= 0 || sold.indexOf(id) >= 0; }
   function visibleItems(sec) { return sec.items.filter(function (g) { return !inCartHidden(g); }); }
 
   function addGarments(sec, place) {
@@ -337,7 +337,7 @@
     var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: TX.pin(title, sub), transparent: true, depthWrite: false, depthTest: false }));
     sp.center.set(0.5, 0.03);
     sp.position.copy(pos);
-    var base = camera.aspect < 1 ? 2.3 : 1.8;
+    var base = camera.aspect < 1 ? 2.0 : 1.8;
     sp.userData.base = base;
     sp.scale.set(base, base * 360 / 640, 1);
     sp.renderOrder = 5;
@@ -377,9 +377,10 @@
     var sec = { id: def.id, short: def.short, group: g, rack: rack, hit: hit, kind: 'rail', width: W, spacing: 0.66, preview: 3, railY: 1.86, mode: 'overview' };
     addGarments(sec, railPlace);
     g.updateMatrixWorld(true);
-    makePin(sec, def.title, def.sub, new THREE.Vector3(0, 2.45, 0.1).applyMatrix4(g.matrixWorld));
+    makePin(sec, def.title, def.sub, new THREE.Vector3(0, 2.45, def.side === 0 ? 0.1 : 0.75).applyMatrix4(g.matrixWorld));
     sec.view = function () {
-      return { pos: new THREE.Vector3(0, 1.45, 1.85).applyMatrix4(g.matrixWorld), look: new THREE.Vector3(0, 1.36, 0).applyMatrix4(g.matrixWorld) };
+      var dist = def.side === 0 ? 1.45 : 1.85;
+      return { pos: new THREE.Vector3(0, 1.45, dist).applyMatrix4(g.matrixWorld), look: new THREE.Vector3(0, 1.36, 0).applyMatrix4(g.matrixWorld) };
     };
     var nrm = new THREE.Vector3(0, 0, 1).applyQuaternion(g.quaternion);
     var tan = new THREE.Vector3(1, 0, 0).applyQuaternion(g.quaternion);
@@ -450,7 +451,7 @@
     g.add(hit);
     var sec = { id: 'casa', short: 'Casa de marcat', group: g, rack: new THREE.Group(), hit: hit, kind: 'till', items: [], count: 0 };
     makePin(sec, 'CASA', 'plătești aici', new THREE.Vector3(0, 1.7, -4.75));
-    sec.view = function () { return { pos: new THREE.Vector3(0.25, 1.85, -2.95), look: new THREE.Vector3(0.25, 1.05, -4.8) }; };
+    sec.view = function () { return { pos: new THREE.Vector3(0.3, 1.6, -3.5), look: new THREE.Vector3(0.3, 0.8, -4.85) }; };
     sec.spot = function (k) { return { x: -0.6 + k * 0.45, z: -3.9 - (k % 2) * 0.25, face: Math.PI }; };
     sections.push(sec);
     drawRegister();
@@ -482,7 +483,7 @@
     ].forEach(wallUnit);
     obstacles.push(stand({ id: 'red', x: 0, z: -2.7, title: 'REDUCERI', sub: 'stand', short: 'Reduceri' }));
     obstacles.push(till());
-    obstacles.push(stand({ id: 'nou', x: 0, z: -6.8, title: 'NOUTĂȚI', sub: 'stand', short: 'Noutăți' }));
+    obstacles.push(stand({ id: 'nou', x: 0, z: -6.35, title: 'NOUTĂȚI', sub: 'stand', short: 'Noutăți' }));
     var order = ['tb', 'tf', 'red', 'casa', 'cb', 'rf', 'nou', 'pb', 'bf', 'gh'];
     sections.sort(function (a, b) { return order.indexOf(a.id) - order.indexOf(b.id); });
   }
@@ -566,32 +567,21 @@
     cartBtn.classList.add('is-bump');
     setTimeout(function () { cartBtn.classList.remove('is-bump'); }, 500);
   }
-  function renderCasa() {
-    var list = $('casa-list');
-    list.innerHTML = '';
-    if (!cart.length) {
-      var li = document.createElement('li');
-      li.className = 'casa-empty';
-      li.textContent = 'Coșul e gol. Alege ceva de pe rafturi și trage-l în coș.';
-      list.appendChild(li);
+  // sold items stay off the shelves for this visit
+  var sold = [];
+  try { sold = JSON.parse(sessionStorage.getItem('umeras-sold') || '[]'); } catch (e) { sold = []; }
+  function renderCasa() { CHECKOUT.render(); }
+  CHECKOUT.init();
+  CHECKOUT.on({
+    items: function () { return cart.map(function (id) { return CATALOG.get(id); }).filter(Boolean); },
+    remove: function (id) { cart = cart.filter(function (x) { return x !== id; }); saveCart(); updateCartUI(); },
+    done: function (ids) {
+      sold = sold.concat(ids);
+      try { sessionStorage.setItem('umeras-sold', JSON.stringify(sold)); } catch (e) { /* ignore */ }
+      cart = []; saveCart(); updateCartUI(); renderCasa();
+      toast('Mulțumim! Comanda ta (demo) e plasată.');
     }
-    cart.forEach(function (id) {
-      var p = CATALOG.get(id); if (!p) return;
-      var li2 = document.createElement('li');
-      var n = document.createElement('span'); n.textContent = p.name + ' · ' + p.size;
-      var pr = document.createElement('b'); pr.textContent = p.price + ' lei';
-      var rm = document.createElement('button');
-      rm.type = 'button'; rm.className = 'casa-rm'; rm.textContent = 'Scoate';
-      rm.setAttribute('aria-label', 'Scoate din coș: ' + p.name);
-      rm.addEventListener('click', function () {
-        cart = cart.filter(function (x) { return x !== id; });
-        saveCart(); updateCartUI(); renderCasa();
-      });
-      li2.appendChild(n); li2.appendChild(pr); li2.appendChild(rm);
-      list.appendChild(li2);
-    });
-    $('casa-total').textContent = cartTotal() + ' lei';
-  }
+  });
 
   var toastTimer = null;
   function toast(text) {
@@ -635,27 +625,50 @@
   var state = 'loading';  // loading | intro | door | moving | overview | section | product
   var current = null;
 
+  /* Top view: fit the floor plan (walls are lowered in this view) between the top bar and the
+     chips, then shift the aim so the plan sits in the middle of that free band. */
   function overviewPose() {
-    var fov = 32;
-    var target = new THREE.Vector3(0, 0.6, (ROOM.z0 + ROOM.z1) / 2);
-    var yaw = camera.aspect < 1 ? 0.1 : 0.3, pitch = camera.aspect < 1 ? 1.18 : 0.9;
+    var fov = 30;
+    var phone = camera.aspect < 1;
+    var yaw = 0, pitch = phone ? 1.2 : 1.0;
     var dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).normalize();
     var pts = [];
-    [-ROOM.x - 0.25, ROOM.x + 0.25].forEach(function (x) { [0, 2.9].forEach(function (y) { [ROOM.z0 + 0.6, ROOM.z1 - 0.2].forEach(function (z) { pts.push(new THREE.Vector3(x, y, z)); }); }); });
+    [-ROOM.x - 0.18, ROOM.x + 0.18].forEach(function (x) { [0, 0.6].forEach(function (y) { [ROOM.z0 + 0.3, ROOM.z1 - 0.18].forEach(function (z) { pts.push(new THREE.Vector3(x, y, z)); }); }); });
+    sections.forEach(function (s) {
+      if (!s.pin) return;
+      var half = s.pin.userData.base * 0.36;
+      [-half, half].forEach(function (dx) { pts.push(s.pin.position.clone().add(new THREE.Vector3(dx, 1.1, 0))); });
+    });
+    var H = window.innerHeight || 800;
+    var topPx = 76, botPx = 76;                      // top bar and chips
+    var yTop = 1 - 2 * topPx / H, yBot = -1 + 2 * botPx / H;
+    var side = phone ? 0.96 : 0.9;
     var cam = camera.clone();
-    cam.fov = fov;
-    cam.updateProjectionMatrix();
-    var top = 0.8, bottom = camera.aspect < 1 ? -0.66 : -0.72, side = camera.aspect < 1 ? 0.97 : 0.9;
-    var lo = 4, hi = 90;
-    for (var it = 0; it < 28; it++) {
-      var d = (lo + hi) / 2;
-      cam.position.copy(target).addScaledVector(dir, d);
-      cam.lookAt(target);
-      cam.updateMatrixWorld();
-      var ok = pts.every(function (p) { var v = p.clone().project(cam); return Math.abs(v.x) < side && v.y < top && v.y > bottom; });
-      if (ok) hi = d; else lo = d;
+    cam.fov = fov; cam.updateProjectionMatrix();
+    var target = new THREE.Vector3(0, 0.3, (ROOM.z0 + ROOM.z1) / 2);
+    function fit() {
+      var lo = 3, hi = 90;
+      for (var it = 0; it < 30; it++) {
+        var d = (lo + hi) / 2;
+        cam.position.copy(target).addScaledVector(dir, d); cam.lookAt(target); cam.updateMatrixWorld();
+        var ok = pts.every(function (p) { var v = p.clone().project(cam); return Math.abs(v.x) < side && v.y < yTop - 0.02 && v.y > yBot + 0.02; });
+        if (ok) hi = d; else lo = d;
+      }
+      cam.position.copy(target).addScaledVector(dir, hi); cam.lookAt(target); cam.updateMatrixWorld();
+      return hi;
     }
-    return { pos: target.clone().addScaledVector(dir, hi), look: target, fov: fov };
+    for (var pass = 0; pass < 3; pass++) {
+      var d = fit();
+      var minY = 9, maxY = -9, minX = 9, maxX = -9;
+      pts.forEach(function (p) { var v = p.clone().project(cam); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x); });
+      var wantY = (yTop + yBot) / 2, gotY = (minY + maxY) / 2, gotX = (minX + maxX) / 2;
+      var halfH = Math.tan(THREE.MathUtils.degToRad(fov / 2)) * d;
+      var up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+      var right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+      target.addScaledVector(up, (gotY - wantY) * halfH).addScaledVector(right, gotX * halfH * cam.aspect);
+    }
+    var dist = fit();
+    return { pos: target.clone().addScaledVector(dir, dist), look: target.clone(), fov: fov };
   }
 
   function setInterior(atDoor) {
@@ -675,7 +688,7 @@
     chipsEl.hidden = mode !== 'overview';
     $('live-pill').hidden = mode !== 'overview';
     secUI.hidden = mode !== 'section';
-    casaCard.hidden = !(mode === 'section' && current && current.id === 'casa');
+    CHECKOUT.show(mode === 'section' && current && current.id === 'casa');
   }
 
   function enterShop() {
@@ -952,7 +965,7 @@
     if (Math.abs(e.deltaX) + Math.abs(e.deltaY) > 8) { wheelLock = now; stepSection((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) > 0 ? 1 : -1); }
   }, { passive: false });
   document.addEventListener('keydown', function (e) {
-    if (STAGE.isOpen() || STAGE.lightboxOpen()) return;
+    if (STAGE.isOpen() || STAGE.lightboxOpen() || CHECKOUT.isOpen()) return;
     if (e.key === 'Escape') {
       if (!legalEl.hidden) closeLegal();
       else if (state === 'section') backToOverview();
@@ -988,7 +1001,7 @@
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     camHome.set(0, 1.32, ROOM.z0 + 0.2 + fitDoor());
-    sections.forEach(function (sc) { if (sc.pin) sc.pin.userData.base = camera.aspect < 1 ? 2.3 : 1.8; });
+    sections.forEach(function (sc) { if (sc.pin) sc.pin.userData.base = camera.aspect < 1 ? 2.0 : 1.8; });
     if (state === 'door') camera.position.copy(camHome);
     if (state === 'overview') {
       var o = overviewPose();
