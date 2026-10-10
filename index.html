@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UMERAȘ Second-Hand</title>
+<meta name="description" content="Magazin second-hand online. Intră pe ușă și caută printre rafturi.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Caveat:wght@500;700&family=Manrope:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!--APP-START-->
+<canvas id="scene" aria-label="Ușa magazinului UMERAȘ. Apasă mânerul ca să intri."></canvas>
+
+<div id="loader" class="loader" role="status">
+  <span class="loader-mark">UMERAȘ</span>
+  <span class="loader-text">Descuiem ușa…</span>
+</div>
+
+<p id="nowebgl" class="nowebgl" hidden>Browserul tău nu poate afișa magazinul 3D. Încearcă din Chrome sau Safari actualizat.</p>
+
+<div id="hint" class="hint" hidden aria-hidden="true">
+  <span>Apasă mânerul<br>ca să intri</span>
+  <svg class="hint-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14m-5-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+
+<nav class="kbd-links" aria-label="Scurtături">
+  <button type="button" id="kbd-enter">Intră în magazin</button>
+  <button type="button" id="kbd-skip">Sari peste intro</button>
+  <button type="button" id="kbd-legal">Informații legale</button>
+</nav>
+
+<section id="legal" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="legal-title">
+  <div class="sheet-paper">
+    <button type="button" class="sheet-close" id="legal-close" aria-label="Închide">×</button>
+    <p class="sheet-eyebrow">Afișul de pe ușă</p>
+    <h2 id="legal-title">Info legale</h2>
+    <p class="sheet-note">Variantă provizorie. Textele complete și datele firmei se completează înainte de lansare.</p>
+
+    <h3>Cine vinde</h3>
+    <p>Operator: <span class="ph">[nume PFA / firmă]</span> · CUI <span class="ph">[—]</span> · Nr. Reg. Com. <span class="ph">[—]</span><br>Contact: <span class="ph">[email]</span> · <span class="ph">[telefon]</span></p>
+
+    <h3>Termeni și condiții</h3>
+    <p>Fiecare produs e unic. Prețurile sunt afișate în lei. Comanda e confirmată prin email, iar plata se face cu cardul sau ramburs la livrare.</p>
+
+    <h3>Confidențialitate (GDPR)</h3>
+    <p>Folosim numele, adresa și telefonul tău doar ca să livrăm comanda. Nu vindem și nu dăm datele mai departe, în afară de curierul care îți aduce coletul.</p>
+
+    <h3>Retur în 14 zile</h3>
+    <p>Poți returna orice produs în 14 zile de la primire, fără să explici motivul (OUG 34/2014). Banii îi primești înapoi în cel mult 14 zile de la retur.</p>
+
+    <h3>ANPC și soluționarea litigiilor</h3>
+    <p><a href="https://anpc.ro" target="_blank" rel="noopener">anpc.ro</a> · <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener">Soluționarea alternativă a litigiilor (SAL)</a></p>
+  </div>
+</section>
+
+<section id="inside" class="inside" hidden aria-live="polite">
+  <div class="inside-card">
+    <p class="inside-eyebrow">Ai intrat</p>
+    <h2>Bun venit în UMERAȘ</h2>
+    <p>Culoarul cu rafturi, standurile și casa de marcat sunt următorul pas pe care îl construim.</p>
+    <button type="button" id="exit-btn" class="btn">Ieși din magazin</button>
+  </div>
+</section>
+<!--APP-END-->
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/people.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
