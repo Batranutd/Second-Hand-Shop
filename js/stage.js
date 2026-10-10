@@ -321,6 +321,7 @@
     var target = worldAt(b.cx, b.cy - 6);
     var cl = root.userData.cloth;
     scene.attach(cl);                 // the garment leaves the hanger; the hanger stays on the rail
+    FIG.setEmpty(root, true);
     loose = cl;
     dropping = { t: 0, obj: cl, from: cl.position.clone(), to: target, s0: cl.scale.x, rz0: cl.rotation.z, spin: (Math.random() < 0.5 ? -1 : 1) * 0.7 };
     FIG.kick(root, 3.2);

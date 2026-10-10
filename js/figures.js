@@ -95,7 +95,7 @@
     var inside = alphaSampler(frontCanvas);
     var nx = 30, ny = Math.round(30 * aspect);
     var verts = [], uvs = [], idx = [];
-    var rad = 0.055 / width;   // sampling radius in u units (~5.5 cm)
+    var rad = 0.07 / width;   // sampling radius in u units (~7 cm): rounder, softer volume
     for (var side = 0; side < 2; side++) {
       for (var j = 0; j <= ny; j++) {
         for (var i = 0; i <= nx; i++) {
@@ -110,8 +110,8 @@
           var s = Math.max(0, Math.min(1, (f - 0.3) / 0.7));
           s = s * s * (3 - 2 * s);
           var x = -width / 2 + u * width, y = -v * height;
-          var drape = Math.sin(x * 38 + 1.3) * 0.004 * v * s;
-          var dz = (puff * s + drape) * (side ? -0.8 : 1);
+          // soft body volume + a gentle curve around the torso, like a garment on a mannequin-less hanger
+          var dz = puff * s * (side ? -0.8 : 1) - x * x * BEND;
           verts.push(x, y, dz);
           uvs.push(side ? 1 - u : u, 1 - v);
         }
@@ -134,8 +134,50 @@
     geo.addGroup(0, front.length, 0);
     geo.addGroup(front.length, back.length, 1);
     geo.computeVertexNormals();
-    geo.userData = { width: width, height: height };
+    geo.userData = { width: width, height: height, shoulder: shoulderFit(inside, width, height) };
     return geo;
+  }
+
+  /* Where the hanger sits inside the garment: fit a smooth arc a + b·x² just under the shoulder
+     line, and find how far the hanger can reach before it would poke out (straps, narrow tops). */
+  var BEND = 0.2;
+  function shoulderFit(inside, width, height) {
+    function top(x) {
+      var u = 0.5 + x / width;
+      if (u < 0 || u > 1) return null;
+      for (var j = 0; j <= 240; j++) { var v = j / 240; if (inside(u, v)) return -v * height; }
+      return null;
+    }
+    var half = 0.2;
+    for (var hx = 0.2; hx > 0.06; hx -= 0.005) {
+      var l = top(-hx), r = top(hx);
+      if (l !== null && r !== null && -Math.min(l, r) < 0.2) { half = hx; break; }
+      half = hx;
+    }
+    var inner = Math.min(0.09, half * 0.5);
+    var yi = (top(-inner) + top(inner)) / 2, yo = (top(-half) + top(half)) / 2;
+    if (isNaN(yi) || isNaN(yo)) { yi = 0; yo = -0.04; }
+    var b = (yo - yi) / (half * half - inner * inner);
+    b = Math.max(-1.4, Math.min(-0.15, b));
+    // run the bar at least 3.5 cm under the top edge everywhere along it, so it stays hidden in the garment
+    var a = yi - b * inner * inner - 0.035;
+    for (var sx = -half; sx <= half + 1e-6; sx += half / 12) {
+      var tp = top(sx);
+      if (tp !== null) a = Math.min(a, tp - b * sx * sx - 0.035);
+    }
+    // but the garment may not ride up over the hook (hoods): keep its top within ~5 cm of the bar,
+    // and shorten the bar instead where it would then show
+    var t0 = top(0);
+    if (t0 !== null && a < t0 - 0.05) {
+      a = t0 - 0.05;
+      for (var hx2 = half; hx2 > 0.07; hx2 -= 0.005) {
+        var ok = true;
+        for (var k = -12; k <= 12; k++) { var px = hx2 * k / 12, tp2 = top(px); if (tp2 !== null && tp2 - (a + b * px * px) < 0.018) { ok = false; break; } }
+        half = hx2;
+        if (ok) break;
+      }
+    }
+    return { a: a, b: b, half: Math.max(0.045, half - 0.025) };
   }
 
   var GEO = {};
@@ -143,8 +185,9 @@
     if (GEO[kind]) return GEO[kind];
     var sc = shapeCanvas(kind);
     var map = TX.tex(sc.canvas);
-    var geo = pillowGeometry(sc.canvas, sc.width, 0.03);
+    var geo = pillowGeometry(sc.canvas, sc.width, 0.035);
     geo.translate(0, -sc.topOffset, 0);
+    geo.userData.shoulder.a -= sc.topOffset;
     GEO[kind] = { geo: geo, map: map, mats: {} };
     return GEO[kind];
   }
@@ -177,7 +220,7 @@
     if (PHOTO[product.id]) return PHOTO[product.id];
     PHOTO[product.id] = Promise.all([loadImage(product.texture.front), product.texture.back ? loadImage(product.texture.back) : null]).then(function (ims) {
       var f = photoCanvas(ims[0]), b = ims[1] ? photoCanvas(ims[1]) : f;
-      var geo = pillowGeometry(f.alpha, product.texture.width, 0.04);
+      var geo = pillowGeometry(f.alpha, product.texture.width, 0.045);
       return { geo: geo, front: TX.tex(f.filled), back: TX.tex(b.filled), alpha: TX.tex(f.alpha) };
     });
     return PHOTO[product.id];
@@ -189,14 +232,7 @@
      it (stronger while it moves). Normals are bent too, so the folds catch the light. */
   var CLOTH_HEAD = [
     'uniform float uTime; uniform float uVel; uniform float uH; uniform float uPhase; uniform float uFlutter;',
-    'float clothW(vec3 p) { float tt = clamp(-p.y / uH, 0.0, 1.0); return pow(tt, 1.45); }',
-    'float clothAmp() { return 0.005 + min(abs(uVel), 4.0) * 0.011 + uFlutter * 0.045; }',
-    'float clothPh() { return uPhase + uTime * (1.5 + uFlutter * 5.0) ; }',
-    'float clothWave(vec3 p, float ph) { return sin(p.x * 13.0 + p.y * 6.5 - ph) * 0.6 + sin(p.x * 22.0 - p.y * 10.0 + ph * 1.3) * 0.4; }',
-    'vec2 clothGrad(vec3 p, float ph) {',
-    '  float a = cos(p.x * 13.0 + p.y * 6.5 - ph) * 0.6; float b = cos(p.x * 22.0 - p.y * 10.0 + ph * 1.3) * 0.4;',
-    '  return vec2(a * 13.0 + b * 22.0, a * 6.5 - b * 10.0);',
-    '}'
+    'float clothT(vec3 p) { return clamp(-p.y / uH, 0.0, 1.0); }'
   ].join('\n');
   function clothMaterial(opts) {
     var u = {
@@ -213,18 +249,15 @@
       for (var k in u) sh.uniforms[k] = u[k];
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + CLOTH_HEAD)
-        .replace('#include <beginnormal_vertex>', [
-          '#include <beginnormal_vertex>',
-          '{ float cw = clothW(position); vec2 g = clothGrad(position, clothPh()) * clothAmp() * cw;',
-          '  float sgn = objectNormal.z >= 0.0 ? 1.0 : -1.0;',
-          '  objectNormal = normalize(objectNormal + vec3(-g.x, -g.y, 0.0) * sgn); }'
-        ].join('\n'))
         .replace('#include <begin_vertex>', [
           '#include <begin_vertex>',
-          '{ float cw = clothW(position); float tt = clamp(-position.y / uH, 0.0, 1.0); float ph = clothPh();',
-          '  transformed.z += clothWave(position, ph) * clothAmp() * cw;',
-          '  transformed.x += (-uVel * 0.045 + sin(uTime * 1.1 + uPhase + tt * 2.5) * 0.004) * cw;',
-          '  transformed.y -= abs(uVel) * 0.006 * cw; }'
+          // the shoulders stay on the hanger; lower down the fabric lags behind the swing (a smooth curve,
+          // no ripples), billows back a touch while it moves, and settles with the slightest sway at rest
+          '{ float tt = clothT(position); float w = tt * tt;',
+          '  float lag = clamp(-uVel, -3.0, 3.0) * 0.035;',
+          '  transformed.x += lag * w * uH;',
+          '  transformed.z += (-min(abs(uVel), 3.0) * 0.012 + sin(uTime * 0.8 + uPhase) * 0.002) * w;',
+          '  transformed.z += uFlutter * sin(tt * 2.4 + uTime * 5.0) * 0.035 * tt; }'
         ].join('\n'));
       if (opts.alpha) {
         sh.fragmentShader = 'uniform sampler2D silhouette;\nuniform float mirror;\n' + sh.fragmentShader.replace(
@@ -253,11 +286,21 @@
     };
     return HG;
   }
-  function hanger() {
+  /* Wooden hanger. With a shoulder fit, the bar follows the garment's shoulders and sits inside it
+     (between the front and back of the cloth), so only the hook shows above the collar —
+     and the whole hanger shows once the garment is taken off. */
+  function hanger(fit) {
     var H = hangerGeo(), g = new THREE.Group();
     var wood = mat('#dcc6a6', 0.5), metal = mat('#c9ced4', 0.3, { metalness: 0.8 });
-    var bar = new THREE.Mesh(H.bar, wood); bar.position.y = 0.012; g.add(bar);
-    [-0.22, 0.22].forEach(function (x) { var c = new THREE.Mesh(H.cap, wood); c.position.set(x, -0.043, 0); g.add(c); });
+    var half = fit ? Math.min(0.21, fit.half) : 0.22, b = fit ? fit.b : -0.9;
+    var pts = [];
+    for (var i = 0; i <= 10; i++) {
+      var x = -half + (2 * half * i) / 10;
+      pts.push(new THREE.Vector3(x, 0.012 + b * x * x, -x * x * BEND));
+    }
+    var bar = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.008, 10, false), wood);
+    g.add(bar);
+    [-half, half].forEach(function (x) { var c = new THREE.Mesh(H.cap, wood); c.scale.setScalar(0.85); c.position.set(x, 0.012 + b * x * x, -x * x * BEND); g.add(c); });
     var hook = new THREE.Mesh(H.hook, metal); hook.position.y = 0.075; hook.rotation.z = -Math.PI * 0.18; g.add(hook);
     var neck = new THREE.Mesh(H.neck, metal); neck.position.y = 0.035; g.add(neck);
     g.traverse(function (n) { if (n.isMesh) n.castShadow = true; });
@@ -306,8 +349,12 @@
       cloth.add(m);
       root.userData.mesh = m;
       root.userData.mats = mats;
+      var fit = geo.userData.shoulder;
+      var clipKind = kind === 'jeans' || kind === 'skirt';
+      // hang the garment so its shoulders rest on the hanger bar (trousers and skirts: waistband in the clip)
+      m.position.y = clipKind ? -0.002 : 0.012 - fit.a;
       var h;
-      if (kind !== 'jeans' && kind !== 'skirt') h = hanger();
+      if (!clipKind) h = hanger(fit);
       else {
         h = hanger();
         h.children[0].visible = false; h.children[1].visible = false; h.children[2].visible = false;
@@ -318,11 +365,19 @@
       }
       body.add(h);
       root.userData.hangerObj = h;
+      // a full-size hanger to show once the garment is gone (the fitted one can be short, e.g. inside a hood)
+      if (!clipKind) {
+        var full = hanger({ a: 0, b: -0.9, half: 0.21 });
+        full.visible = false;
+        body.add(full);
+        root.userData.fullHanger = full;
+      }
       body.add(cloth);
       if (opts.tag !== false) {
         var tag = priceTag(product.price, product.size, opts.tagScale);
-        var w = geo.userData.width;
-        tag.position.set(w * 0.3, -0.1, (product.real ? 0.04 : 0.03) + 0.025);
+        var w = geo.userData.width, tx = Math.min(w * 0.28, fit.half * 0.85);
+        var ty = clipKind ? -0.01 : 0.012 + fit.b * tx * tx - 0.03;
+        tag.position.set(tx, ty, 0.055 - tx * tx * BEND);
         tag.rotation.z = 0.08;
         cloth.add(tag);
         root.userData.tag = tag;
@@ -349,8 +404,9 @@
 
   /* hide or show the garment, leaving the hanger (an empty hanger keeps swinging) */
   function setEmpty(root, empty) {
-    var c = root.userData.cloth;
-    if (c && c.parent === root.userData.body) c.visible = !empty;
+    var u = root.userData, c = u.cloth;
+    if (c && c.parent === u.body) c.visible = !empty;
+    if (u.fullHanger) { u.fullHanger.visible = !!empty; u.hangerObj.visible = !empty; }
   }
   function kick(root, v) { root.userData.vel += v; }
 

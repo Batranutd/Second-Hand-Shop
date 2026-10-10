@@ -282,12 +282,11 @@
   }
 
   /* ---------------- shelves, stands, till ---------------- */
-  /* An item put in the basket leaves its empty hanger on the rail for a few seconds (still
-     swinging), then the hanger goes and the others slide together. */
-  var ghosts = {};
+  /* An item put in the basket leaves its empty hanger on the rail, like in a real shop.
+     Browsing skips empty hangers; if the item comes back out of the basket it hangs there again. */
   function isGone(g) { var id = g.userData.product.id; return cart.indexOf(id) >= 0 || sold.indexOf(id) >= 0; }
-  function isGhost(g) { var e = ghosts[g.userData.product.id]; return !!e && e > time && isGone(g); }
-  function inCartHidden(g) { return isGone(g) && !isGhost(g); }               // out of the layout
+  function isGhost(g) { return isGone(g); }
+  function inCartHidden(g) { return false; }                                   // every hanger keeps its place
   function visibleItems(sec) { return sec.items.filter(function (g) { return !isGone(g); }); }   // can be browsed
   function slotItems(sec) { return sec.items.filter(function (g) { return !inCartHidden(g); }); }  // takes a place on the rail
   // the browse offset counts only real garments; convert it to a place on the rail
@@ -338,7 +337,7 @@
       g.position.set(px, sec.railY, 0.02 + front);
       g.scale.setScalar(0.92 * (0.35 + 0.65 * fade));
       g.userData.push = dt ? (px - prevX) / dt * -2.2 : 0;
-      FIG.setEmpty(g, isGhost(g));
+      setEmptyAnimated(g, isGhost(g));
     });
   }
   function ringPlace(sec, dt) {
@@ -346,7 +345,9 @@
     sec.count = vis.length;
     var n = Math.max(slots.length, 1), R = sec.radius;
     var prev = sec.rack.rotation.y;
-    sec.rack.rotation.y = -slotOffset(sec, vis, slots) * (Math.PI * 2 / n);
+    var so = sec.hold && sec.hold.until > time && slots.indexOf(sec.hold.g) >= 0 ? slots.indexOf(sec.hold.g) : slotOffset(sec, vis, slots);
+    var goal = -so * (Math.PI * 2 / n);
+    sec.rack.rotation.y = dt ? prev + (goal - prev) * Math.min(1, dt * 8) : goal;
     var push = dt ? (sec.rack.rotation.y - prev) / dt * 1.4 : 0;
     sec.items.forEach(function (g) {
       if (inCartHidden(g)) { g.visible = false; return; }
@@ -356,14 +357,19 @@
       g.rotation.y = a;
       g.scale.setScalar(0.86);
       g.userData.push = push;
-      FIG.setEmpty(g, isGhost(g));
+      setEmptyAnimated(g, isGhost(g));
     });
   }
+  function setEmptyAnimated(g, empty) {
+    if (g.userData.wasEmpty === empty) return;
+    if (g.userData.wasEmpty && !empty) FIG.kick(g, 2);    // back on its hanger
+    g.userData.wasEmpty = empty;
+    FIG.setEmpty(g, empty);
+  }
   function leaveEmptyHanger(id) {
-    ghosts[id] = time + 3.4;
     sections.forEach(function (sec) {
       (sec.items || []).forEach(function (g) {
-        if (g.userData.product.id === id) { FIG.kick(g, 2.6); if (sec === current) sec.hold = { g: g, until: time + 3.4 }; }
+        if (g.userData.product.id === id) { FIG.kick(g, 2.6); if (sec === current) sec.hold = { g: g, until: time + 2.4 }; }
       });
     });
   }
