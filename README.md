@@ -5,7 +5,8 @@ Magazin second-hand online, construit ca o experiență 3D: intri pe ușă, te p
 ## Stadiu
 
 - [x] **Pasul 1: ușa magazinului.** Geam prin care se văd oamenii din magazin, semn OPEN care se leagănă și se întoarce, program NON-STOP, mâner cu indicator, sticker „Sari peste intro”, afiș cu informațiile legale, animația de deschidere a ușii.
-- [ ] Pasul 2: culoarul cu rafturi, bannere și standuri
+- [x] **Stil Pixar realist:** cărămidă, lemn vopsit, alamă, lumină filmică cu umbre moi; ușa e singura luminată.
+- [x] **Pasul 2: culoarul.** Rafturi cu bannere (tricouri, rochii, blugi, cămăși, pantaloni, geci), standuri Reduceri și Noutăți, casa de marcat cu casier. Mergi trăgând în sus, te uiți trăgând stânga–dreapta, atingi un raft ca să-l vezi de aproape; scurtături jos pe ecran.
 - [ ] Pasul 3: umerașe cu swipe, haina în focus, eticheta de preț
 - [ ] Pasul 4: coșul (tragi haina în coș)
 - [ ] Pasul 5: casa de marcat, plată card (vizual) / ramburs cu factură
@@ -26,5 +27,5 @@ npx serve .
 - `index.html`: pagina
 - `css/style.css`: stiluri pentru elementele HTML (indicator, afiș legal, card)
 - `js/textures.js`: semnele, stickerele și afișele desenate pe canvas
-- `js/people.js`: clienții animați și hainele pe umerașe
-- `js/main.js`: scena 3D, ușa, animațiile și interacțiunile
+- `js/people.js`: clienții animați (proporții reale) și hainele cu volum pe umerașe
+- `js/main.js`: ușa, culoarul, rafturile, standurile, casa, navigarea și interacțiunile

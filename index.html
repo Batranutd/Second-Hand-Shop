@@ -56,12 +56,28 @@
   </div>
 </section>
 
-<section id="inside" class="inside" hidden aria-live="polite">
-  <div class="inside-card">
-    <p class="inside-eyebrow">Ai intrat</p>
-    <h2>Bun venit în UMERAȘ</h2>
-    <p>Culoarul cu rafturi, standurile și casa de marcat sunt următorul pas pe care îl construim.</p>
-    <button type="button" id="exit-btn" class="btn">Ieși din magazin</button>
+<div id="vignette" class="vignette" aria-hidden="true"></div>
+
+<div id="aisle-ui" class="aisle-ui" hidden>
+  <button type="button" id="exit-btn" class="exit-btn" aria-label="Ieși din magazin">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Ușa
+  </button>
+  <nav id="chips" class="chips" aria-label="Secțiunile magazinului"></nav>
+</div>
+
+<div id="gesture" class="gesture" hidden aria-live="polite">
+  <svg class="gesture-hand" viewBox="0 0 48 48" aria-hidden="true"><path d="M20 30V12a3 3 0 0 1 6 0v12m0-4a3 3 0 0 1 6 0v4m0-2a3 3 0 0 1 6 0v8c0 7-5 12-11 12h-2c-4 0-7-2-9-5l-5-8a3 3 0 0 1 5-3l4 4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <p><b>Trage în sus</b> ca să mergi pe culoar<br><b>Stânga–dreapta</b> ca să te uiți în jur<br><b>Atinge un raft</b> ca să-l vezi de aproape</p>
+</div>
+
+<section id="focus" class="focus" hidden aria-live="polite">
+  <div class="focus-card">
+    <p class="focus-kind" id="focus-kind">Raft</p>
+    <h2 id="focus-title">Tricouri</h2>
+    <p id="focus-text"></p>
+    <p class="focus-tip" id="focus-tip">Trage stânga–dreapta ca să vezi tot raftul.</p>
+    <button type="button" id="focus-back" class="btn">Înapoi pe culoar</button>
   </div>
 </section>
 <!--APP-END-->
