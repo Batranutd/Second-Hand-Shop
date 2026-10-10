@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>UMERAȘ Second-Hand</title>
-<meta name="description" content="Magazin second-hand online. Intră pe ușă și caută printre rafturi.">
+<meta name="description" content="Magazin second-hand online. Intră pe ușă, alege un raft și vezi hainele de aproape.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Caveat:wght@500;700&family=Manrope:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Caveat:wght@700&family=Manrope:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <!--APP-START-->
-<canvas id="scene" aria-label="Ușa magazinului UMERAȘ. Apasă mânerul ca să intri."></canvas>
+<canvas id="scene" aria-label="Magazinul UMERAȘ"></canvas>
 
 <div id="loader" class="loader" role="status">
   <span class="loader-mark">UMERAȘ</span>
@@ -22,8 +22,8 @@
 <p id="nowebgl" class="nowebgl" hidden>Browserul tău nu poate afișa magazinul 3D. Încearcă din Chrome sau Safari actualizat.</p>
 
 <div id="hint" class="hint" hidden aria-hidden="true">
-  <span>Apasă mânerul<br>ca să intri</span>
-  <svg class="hint-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14m-5-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10m0-1.5a1.5 1.5 0 0 1 3 0V10m0-.5a1.5 1.5 0 0 1 3 0V14c0 3.5-2.5 6-6 6h-.5c-2 0-3.5-1-4.5-2.5L4.5 14a1.5 1.5 0 0 1 2.5-1.5L9 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  Apasă mânerul
 </div>
 
 <nav class="kbd-links" aria-label="Scurtături">
@@ -31,6 +31,92 @@
   <button type="button" id="kbd-skip">Sari peste intro</button>
   <button type="button" id="kbd-legal">Informații legale</button>
 </nav>
+
+<header id="topbar" class="topbar" hidden>
+  <button type="button" id="exit-btn" class="pill-btn">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Ieși
+  </button>
+  <p id="live-pill" class="live-pill" hidden><span class="dot" aria-hidden="true"></span><span id="live-count">Doar tu în magazin acum</span></p>
+  <button type="button" id="cart-btn" class="cart-btn" aria-label="Coșul tău">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.3 10.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5 8zm4 0V6.5a3 3 0 0 1 6 0V8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span id="cart-count" class="cart-count" hidden>0</span>
+  </button>
+</header>
+
+<nav id="chips" class="chips" aria-label="Secțiunile magazinului" hidden></nav>
+
+<section id="section-ui" class="section-ui" hidden aria-live="polite">
+  <div class="sec-head">
+    <button type="button" id="sec-back" class="pill-btn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Magazin
+    </button>
+    <h2 id="sec-title" class="sec-title">Raft</h2>
+  </div>
+  <div class="sec-controls">
+    <button type="button" id="sec-prev" class="arrow-btn" aria-label="Haina anterioară">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="sec-mid">
+      <button type="button" id="sec-open" class="btn">Vezi de aproape</button>
+      <p id="sec-count" class="sec-count"></p>
+    </div>
+    <button type="button" id="sec-next" class="arrow-btn" aria-label="Haina următoare">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</section>
+
+<section id="casa-card" class="casa-card" hidden aria-labelledby="casa-title">
+  <h3 id="casa-title">Coșul tău</h3>
+  <ul id="casa-list" class="casa-list"></ul>
+  <p class="casa-total-row"><span>Total</span><b id="casa-total">0 lei</b></p>
+  <p class="casa-note">Plata cu cardul sau ramburs la livrare vine la pasul următor.</p>
+</section>
+
+<div id="product" class="product" hidden>
+  <div class="stage-wrap">
+    <canvas id="stage" aria-label="Haina în 3D. Trage stânga sau dreapta ca s-o rotești."></canvas>
+    <p id="p-hint" class="p-hint">Trage stânga–dreapta ca s-o rotești 360°<br>sau trage-o în jos, în coș</p>
+    <div class="stage-actions">
+      <button type="button" id="p-back" class="round-btn" aria-label="Înapoi la raft">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Înapoi</span>
+      </button>
+      <button type="button" id="p-basket" class="basket-btn">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 18h32l-3.2 20.4A3 3 0 0 1 33.8 41H14.2a3 3 0 0 1-3-2.6L8 18zM16 18l6-10m10 10l-6-10M17 26v8m7-8v8m7-8v8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="b-text">Pune în coș</span>
+      </button>
+    </div>
+  </div>
+  <aside id="sheet" class="sheet-info" aria-labelledby="p-name">
+    <p id="p-brand" class="p-brand">Brand</p>
+    <h2 id="p-name" class="p-name">Produs</h2>
+    <p id="p-price" class="p-price">0 lei</p>
+    <dl id="p-rows" class="p-rows"></dl>
+    <div id="p-gallery-wrap" class="p-gallery-wrap">
+      <h3>Poze reale</h3>
+      <div id="p-gallery" class="p-gallery"></div>
+    </div>
+    <p id="p-note" class="p-note" hidden>Haină demonstrativă. Pozele și detaliile reale apar când adaugi marfa ta.</p>
+  </aside>
+</div>
+
+<div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Poză produs">
+  <div class="lb-stage"><img id="lb-img" alt=""></div>
+  <button type="button" id="lb-close" class="lb-close" aria-label="Închide poza">×</button>
+  <button type="button" id="lb-prev" class="lb-nav lb-prev" aria-label="Poza anterioară">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <button type="button" id="lb-next" class="lb-nav lb-next" aria-label="Poza următoare">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <div class="lb-foot"><span id="lb-cap"></span><span id="lb-count"></span></div>
+  <p class="lb-tip">Ciupește sau atinge de două ori ca să mărești</p>
+</div>
+
+<p id="toast" class="toast" hidden role="status"></p>
 
 <section id="legal" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="legal-title">
   <div class="sheet-paper">
@@ -55,36 +141,13 @@
     <p><a href="https://anpc.ro" target="_blank" rel="noopener">anpc.ro</a> · <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener">Soluționarea alternativă a litigiilor (SAL)</a></p>
   </div>
 </section>
-
-<div id="vignette" class="vignette" aria-hidden="true"></div>
-
-<div id="aisle-ui" class="aisle-ui" hidden>
-  <button type="button" id="exit-btn" class="exit-btn" aria-label="Ieși din magazin">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Ușa
-  </button>
-  <nav id="chips" class="chips" aria-label="Secțiunile magazinului"></nav>
-</div>
-
-<div id="gesture" class="gesture" hidden aria-live="polite">
-  <svg class="gesture-hand" viewBox="0 0 48 48" aria-hidden="true"><path d="M20 30V12a3 3 0 0 1 6 0v12m0-4a3 3 0 0 1 6 0v4m0-2a3 3 0 0 1 6 0v8c0 7-5 12-11 12h-2c-4 0-7-2-9-5l-5-8a3 3 0 0 1 5-3l4 4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <p><b>Trage în sus</b> ca să mergi pe culoar<br><b>Stânga–dreapta</b> ca să te uiți în jur<br><b>Atinge un raft</b> ca să-l vezi de aproape</p>
-</div>
-
-<section id="focus" class="focus" hidden aria-live="polite">
-  <div class="focus-card">
-    <p class="focus-kind" id="focus-kind">Raft</p>
-    <h2 id="focus-title">Tricouri</h2>
-    <p id="focus-text"></p>
-    <p class="focus-tip" id="focus-tip">Trage stânga–dreapta ca să vezi tot raftul.</p>
-    <button type="button" id="focus-back" class="btn">Înapoi pe culoar</button>
-  </div>
-</section>
 <!--APP-END-->
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
 <script src="js/textures.js"></script>
-<script src="js/people.js"></script>
+<script src="js/figures.js"></script>
+<script src="js/products.js"></script>
+<script src="js/stage.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
