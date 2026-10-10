@@ -21,7 +21,7 @@
   var api = { onBack: null, onAdd: null, inCart: function () { return false; } };
   var rot = { y: 0, vel: 0, face: 0, target: 0, tilt: 0 }, intro = 0, open = false, raf = 0, last = 0, t = 0;
   var TILT = 0.55, FLIP_AT = 0.3;
-  var carry = null, dropping = null;
+  var carry = null, dropping = null, loose = null;
 
   function init() {
     if (renderer) return true;
@@ -39,6 +39,12 @@
     var key = new THREE.DirectionalLight('#ffffff', 0.85); key.position.set(-1.2, 1.6, 2.2); scene.add(key);
     var rim = new THREE.DirectionalLight('#dff1f2', 0.55); rim.position.set(1.5, 1, -2); scene.add(rim);
     var fill = new THREE.DirectionalLight('#fff3e0', 0.35); fill.position.set(1.8, -0.5, 1.5); scene.add(fill);
+    // the rail the hanger hangs on
+    var railMat = new THREE.MeshStandardMaterial({ color: '#d4d9de', metalness: 0.75, roughness: 0.28 });
+    var rail = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.4, 20), railMat);
+    rail.rotation.z = Math.PI / 2;
+    rail.position.y = 0.004;
+    scene.add(rail);
     window.addEventListener('resize', resize);
     bindInput();
     return true;
@@ -67,6 +73,7 @@
     document.body.classList.add('is-focused');
     resize();
     if (root) { scene.remove(root); root = null; }
+    if (loose) { scene.remove(loose); loose = null; }
     rot.y = -0.5; rot.vel = 0; rot.face = 0; rot.target = 0; rot.tilt = 0; intro = 0; dropping = null; carry = null;
     var two = hasBack(p);
     el.faces.hidden = !two;
@@ -165,7 +172,7 @@
     if (root) {
       intro = Math.min(1, intro + dt / (reduce ? 0.2 : 0.9));
       var e = 1 - Math.pow(1 - intro, 3);
-      if (!carry && !dropping) {
+      {
         // spring towards the shown face plus a little tilt; never rests edge-on
         var sway = rot.dragging || reduce ? 0 : Math.sin(t * 0.7) * 0.1 * Math.min(1, intro * 2);
         var goal = rot.target + rot.tilt + sway;
@@ -177,14 +184,19 @@
         root.scale.setScalar(0.75 + 0.25 * e);
       }
       root.rotation.y = rot.y;
-      if (root.userData.body) FIG.swing(root, dt, -rot.vel * 0.12, t);
+      if (root.userData.body) FIG.swing(root, dt, -rot.vel * 0.12, t, -rot.vel * 0.3);
       if (dropping) {
-        dropping.t += dt / 0.55;
+        // the garment slips off the hanger and falls into the basket
+        dropping.t += dt / 0.8;
         var p = Math.min(1, dropping.t), ep = p * p;
-        root.position.lerpVectors(dropping.from, dropping.to, ep);
-        root.position.y += Math.sin(p * Math.PI) * 0.12;
-        root.scale.setScalar(dropping.s0 * (1 - ep * 0.92));
-        root.rotation.z = p * 0.6;
+        var c = dropping.obj;
+        c.position.lerpVectors(dropping.from, dropping.to, ep);
+        c.position.y += Math.sin(Math.min(1, p * 1.6) * Math.PI) * 0.06;
+        c.position.x += Math.sin(p * Math.PI * 2.2) * 0.03 * (1 - p);
+        c.scale.setScalar(dropping.s0 * (1 - ep * 0.88));
+        c.rotation.z = dropping.rz0 + ep * dropping.spin;
+        c.rotation.x = Math.sin(p * Math.PI) * 0.5;
+        root.userData.flutter = 1;
         if (p >= 1) finishDrop();
       }
     }
@@ -223,7 +235,12 @@
       if (!drag.mode && Math.hypot(dx, dy) > 9) {
         var canCarry = drag.onG && dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.2 && !api.inCart(product.id);
         drag.mode = canCarry ? 'carry' : 'rotate';
-        if (drag.mode === 'carry') { carry = { start: root.position.clone() }; el.basket.classList.add('is-target'); }
+        if (drag.mode === 'carry') {
+          carry = { w0: worldAt(drag.x, drag.y) };
+          el.basket.classList.add('is-target');
+          FIG.kick(root, 2.4);          // lifting the garment off sets the hanger swinging
+          root.userData.flutter = 0.8;
+        }
         hideHint();
       }
       if (drag.mode === 'rotate') {
@@ -234,11 +251,13 @@
         drag.lx = e.clientX; drag.lt = performance.now();
       } else if (drag.mode === 'carry') {
         var w = worldAt(e.clientX, e.clientY);
-        var w0 = worldAt(drag.x, drag.y);
-        root.position.set(carry.start.x + (w.x - w0.x), carry.start.y + (w.y - w0.y), 0);
+        var body = root.userData.body, cl = root.userData.cloth;
+        var a = body.worldToLocal(carry.w0.clone()), bb = body.worldToLocal(w.clone());
+        cl.position.set(bb.x - a.x, bb.y - a.y, 0.04);
         var b = basketRect(), inside = e.clientX > b.x && e.clientX < b.x + b.w && e.clientY > b.y && e.clientY < b.y + b.h;
         el.basket.classList.toggle('is-hot', inside);
-        root.scale.setScalar(inside ? 0.8 : 0.95);
+        cl.scale.setScalar(inside ? 0.8 : 1);
+        root.userData.flutter = Math.max(root.userData.flutter, 0.4);
       }
     });
     function end(e) {
@@ -255,7 +274,7 @@
         var inside = e && e.clientX > b.x && e.clientX < b.x + b.w && e.clientY > b.y && e.clientY < b.y + b.h;
         el.basket.classList.remove('is-target', 'is-hot');
         if (inside) startDrop();
-        else { var from = root.position.clone(); carry = null; springBack(from); }
+        else { carry = null; springBack(); }
       }
     }
     el.canvas.addEventListener('pointerup', end);
@@ -283,28 +302,38 @@
     bindZoom();
   }
 
-  function springBack(from) {
-    var t0 = performance.now();
+  /* dropped outside the basket: the garment goes back onto its hanger */
+  function springBack() {
+    var cl = root.userData.cloth, from = cl.position.clone(), s0 = cl.scale.x, t0 = performance.now();
     (function anim(now) {
-      var p = Math.min(1, (now - t0) / 350), e = 1 - Math.pow(1 - p, 3);
-      root.position.lerpVectors(from, new THREE.Vector3(0, 0, 0), e);
-      root.scale.setScalar(0.95 + 0.05 * e);
+      var p = Math.min(1, (now - t0) / 420), e = 1 - Math.pow(1 - p, 3);
+      cl.position.lerpVectors(from, new THREE.Vector3(0, 0, 0), e);
+      cl.scale.setScalar(s0 + (1 - s0) * e);
       if (p < 1) requestAnimationFrame(anim);
+      else FIG.kick(root, -1.2);
     })(t0);
   }
 
   function startDrop() {
     hideHint();
+    if (!root || !root.userData.cloth) return;
     var b = basketRect();
-    var target = worldAt(b.cx, b.cy);
-    dropping = { t: 0, from: root.position.clone(), to: target, s0: root.scale.x };
+    var target = worldAt(b.cx, b.cy - 6);
+    var cl = root.userData.cloth;
+    scene.attach(cl);                 // the garment leaves the hanger; the hanger stays on the rail
+    loose = cl;
+    dropping = { t: 0, obj: cl, from: cl.position.clone(), to: target, s0: cl.scale.x, rz0: cl.rotation.z, spin: (Math.random() < 0.5 ? -1 : 1) * 0.7 };
+    FIG.kick(root, 3.2);
+    root.userData.flutter = 1;
     el.basket.classList.add('is-hot');
   }
   function finishDrop() {
     var p = product;
+    if (dropping && dropping.obj) { scene.remove(dropping.obj); }
+    loose = null;
     dropping = null;
     carry = null;
-    root.visible = false;
+    FIG.kick(root, -1.6);
     el.basket.classList.remove('is-hot');
     el.basket.classList.add('is-bump');
     setTimeout(function () { el.basket.classList.remove('is-bump'); }, 450);

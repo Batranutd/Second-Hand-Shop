@@ -282,8 +282,29 @@
   }
 
   /* ---------------- shelves, stands, till ---------------- */
-  function inCartHidden(g) { var id = g.userData.product.id; return cart.indexOf(id) >= 0 || sold.indexOf(id) >= 0; }
-  function visibleItems(sec) { return sec.items.filter(function (g) { return !inCartHidden(g); }); }
+  /* An item put in the basket leaves its empty hanger on the rail for a few seconds (still
+     swinging), then the hanger goes and the others slide together. */
+  var ghosts = {};
+  function isGone(g) { var id = g.userData.product.id; return cart.indexOf(id) >= 0 || sold.indexOf(id) >= 0; }
+  function isGhost(g) { var e = ghosts[g.userData.product.id]; return !!e && e > time && isGone(g); }
+  function inCartHidden(g) { return isGone(g) && !isGhost(g); }               // out of the layout
+  function visibleItems(sec) { return sec.items.filter(function (g) { return !isGone(g); }); }   // can be browsed
+  function slotItems(sec) { return sec.items.filter(function (g) { return !inCartHidden(g); }); }  // takes a place on the rail
+  // the browse offset counts only real garments; convert it to a place on the rail
+  function slotOffset(sec, vis, slots) {
+    var n = vis.length;
+    if (!n) return 0;
+    var at = function (i) { return slots.indexOf(vis[i]); };
+    var o = sec.offset, i0 = Math.floor(o), f = o - i0;
+    if (sec.kind === 'ring') {
+      if (slots.length === n) return o;
+      var r = Math.round(o), k = ((r % n) + n) % n;
+      return at(k) + (o - r) + Math.floor(r / n) * slots.length;
+    }
+    if (o <= 0) return at(0) + o;
+    if (o >= n - 1) return at(n - 1) + (o - (n - 1));
+    return at(i0) + (at(i0 + 1) - at(i0)) * f;
+  }
 
   function addGarments(sec, place) {
     sec.items = [];
@@ -298,38 +319,52 @@
   }
 
   function railPlace(sec, dt) {
-    var vis = visibleItems(sec);
+    var vis = visibleItems(sec), slots = slotItems(sec);
     sec.count = vis.length;
     var spacing = sec.spacing, half = sec.width / 2 - 0.1;
-    var shift = sec.mode === 'overview' ? -(Math.min(vis.length, sec.preview) - 1) * spacing / 2 : 0;
+    var shift = sec.mode === 'overview' ? -(Math.min(slots.length, sec.preview) - 1) * spacing / 2 : 0;
+    // right after something goes in the basket, keep the empty hanger in the middle of the view
+    var so = sec.hold && sec.hold.until > time && slots.indexOf(sec.hold.g) >= 0 ? slots.indexOf(sec.hold.g) : slotOffset(sec, vis, slots);
     sec.items.forEach(function (g) {
-      if (inCartHidden(g)) { g.visible = false; return; }
-      var i = vis.indexOf(g);
-      var x = (i - sec.offset) * spacing + shift;
-      var fade = clamp((half - Math.abs(x)) / 0.2 + 1, 0, 1);
+      if (inCartHidden(g)) { g.visible = false; g.userData.px = undefined; return; }
+      var si = slots.indexOf(g), vi = vis.indexOf(g);
+      var x = (si - so) * spacing + shift;
+      var prevX = g.userData.px === undefined ? x : g.userData.px;
+      var px = dt ? prevX + (x - prevX) * Math.min(1, dt * 9) : x;   // glide, so neighbours slide into a gap
+      g.userData.px = px;
+      var fade = clamp((half - Math.abs(px)) / 0.2 + 1, 0, 1);
       g.visible = fade > 0.02;
-      var prevX = g.position.x;
-      var front = sec.mode === 'section' ? Math.max(0, 1 - Math.abs(i - sec.offset) * 1.6) * 0.07 : 0;
-      g.position.set(x, sec.railY, 0.02 + front);
+      var front = sec.mode === 'section' && vi >= 0 ? Math.max(0, 1 - Math.abs(vi - sec.offset) * 1.6) * 0.07 : 0;
+      g.position.set(px, sec.railY, 0.02 + front);
       g.scale.setScalar(0.92 * (0.35 + 0.65 * fade));
-      g.userData.push = dt ? (g.position.x - prevX) / dt * -2.2 : 0;
+      g.userData.push = dt ? (px - prevX) / dt * -2.2 : 0;
+      FIG.setEmpty(g, isGhost(g));
     });
   }
   function ringPlace(sec, dt) {
-    var vis = visibleItems(sec);
+    var vis = visibleItems(sec), slots = slotItems(sec);
     sec.count = vis.length;
-    var n = Math.max(vis.length, 1), R = sec.radius;
+    var n = Math.max(slots.length, 1), R = sec.radius;
     var prev = sec.rack.rotation.y;
-    sec.rack.rotation.y = -sec.offset * (Math.PI * 2 / n);
+    sec.rack.rotation.y = -slotOffset(sec, vis, slots) * (Math.PI * 2 / n);
     var push = dt ? (sec.rack.rotation.y - prev) / dt * 1.4 : 0;
     sec.items.forEach(function (g) {
       if (inCartHidden(g)) { g.visible = false; return; }
-      var i = vis.indexOf(g), a = i * (Math.PI * 2 / n);
+      var i = slots.indexOf(g), a = i * (Math.PI * 2 / n);
       g.visible = true;
       g.position.set(Math.sin(a) * R, sec.railY, Math.cos(a) * R);
       g.rotation.y = a;
       g.scale.setScalar(0.86);
       g.userData.push = push;
+      FIG.setEmpty(g, isGhost(g));
+    });
+  }
+  function leaveEmptyHanger(id) {
+    ghosts[id] = time + 3.4;
+    sections.forEach(function (sec) {
+      (sec.items || []).forEach(function (g) {
+        if (g.userData.product.id === id) { FIG.kick(g, 2.6); if (sec === current) sec.hold = { g: g, until: time + 3.4 }; }
+      });
     });
   }
 
@@ -810,7 +845,7 @@
   STAGE.on({
     inCart: function (id) { return cart.indexOf(id) >= 0; },
     onBack: closeProduct,
-    onAdd: function (p) { addToCart(p); setTimeout(closeProduct, 1000); }
+    onAdd: function (p) { addToCart(p); leaveEmptyHanger(p.id); setTimeout(closeProduct, 1700); }
   });
 
   /* ---------------- chips ---------------- */

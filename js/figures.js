@@ -178,27 +178,63 @@
     PHOTO[product.id] = Promise.all([loadImage(product.texture.front), product.texture.back ? loadImage(product.texture.back) : null]).then(function (ims) {
       var f = photoCanvas(ims[0]), b = ims[1] ? photoCanvas(ims[1]) : f;
       var geo = pillowGeometry(f.alpha, product.texture.width, 0.04);
-      // the front silhouette cuts the mesh; both sides draw from the filled canvases
-      var alphaTex = TX.tex(f.alpha);
-      var frontMap = TX.tex(f.filled), backMap = TX.tex(b.filled);
-      var mFront = new THREE.MeshStandardMaterial({ map: frontMap, alphaMap: null, roughness: 0.92, emissive: '#ffffff', emissiveMap: frontMap, emissiveIntensity: 0.35 });
-      var mBack = new THREE.MeshStandardMaterial({ map: backMap, roughness: 0.92, emissive: '#ffffff', emissiveMap: backMap, emissiveIntensity: 0.35 });
-      // clip to the silhouette with the alpha of the front cut-out (same uv for both faces, mirrored on the back)
-      [mFront, mBack].forEach(function (m, i) {
-        m.alphaTest = 0.5;
-        m.onBeforeCompile = function (sh) {
-          sh.uniforms.silhouette = { value: alphaTex };
-          sh.uniforms.mirror = { value: i };
-          sh.fragmentShader = 'uniform sampler2D silhouette;\nuniform float mirror;\n' + sh.fragmentShader.replace(
-            '#include <alphatest_fragment>',
-            'vec2 suv = vUv; if (mirror > 0.5) suv.x = 1.0 - suv.x;\n' +
-            'if (texture2D(silhouette, suv).a < 0.5) discard;\n#include <alphatest_fragment>');
-        };
-        m.customProgramCacheKey = function () { return 'photo-garment-' + i; };
-      });
-      return { geo: geo, mats: [mFront, mBack] };
+      return { geo: geo, front: TX.tex(f.filled), back: TX.tex(b.filled), alpha: TX.tex(f.alpha) };
     });
     return PHOTO[product.id];
+  }
+
+  /* ---------------- cloth: the fabric moves like fabric ----------------
+     Every garment gets its own material whose vertex shader bends the cloth: the top is held
+     by the hanger, the hem trails behind when the hanger swings, and soft folds ripple across
+     it (stronger while it moves). Normals are bent too, so the folds catch the light. */
+  var CLOTH_HEAD = [
+    'uniform float uTime; uniform float uVel; uniform float uH; uniform float uPhase; uniform float uFlutter;',
+    'float clothW(vec3 p) { float tt = clamp(-p.y / uH, 0.0, 1.0); return pow(tt, 1.45); }',
+    'float clothAmp() { return 0.005 + min(abs(uVel), 4.0) * 0.011 + uFlutter * 0.045; }',
+    'float clothPh() { return uPhase + uTime * (1.5 + uFlutter * 5.0) ; }',
+    'float clothWave(vec3 p, float ph) { return sin(p.x * 13.0 + p.y * 6.5 - ph) * 0.6 + sin(p.x * 22.0 - p.y * 10.0 + ph * 1.3) * 0.4; }',
+    'vec2 clothGrad(vec3 p, float ph) {',
+    '  float a = cos(p.x * 13.0 + p.y * 6.5 - ph) * 0.6; float b = cos(p.x * 22.0 - p.y * 10.0 + ph * 1.3) * 0.4;',
+    '  return vec2(a * 13.0 + b * 22.0, a * 6.5 - b * 10.0);',
+    '}'
+  ].join('\n');
+  function clothMaterial(opts) {
+    var u = {
+      uTime: { value: 0 }, uVel: { value: 0 }, uH: { value: opts.height || 0.7 },
+      uPhase: { value: Math.random() * 6.28 }, uFlutter: { value: 0 },
+      silhouette: { value: opts.alpha || null }, mirror: { value: opts.mirror || 0 }
+    };
+    var m = new THREE.MeshStandardMaterial({
+      map: opts.map, color: opts.color || '#ffffff', roughness: 0.9, alphaTest: 0.5,
+      emissive: opts.photo ? '#ffffff' : '#000000', emissiveMap: opts.photo ? opts.map : null, emissiveIntensity: opts.photo ? 0.35 : 1
+    });
+    m.userData.u = u;
+    m.onBeforeCompile = function (sh) {
+      for (var k in u) sh.uniforms[k] = u[k];
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\n' + CLOTH_HEAD)
+        .replace('#include <beginnormal_vertex>', [
+          '#include <beginnormal_vertex>',
+          '{ float cw = clothW(position); vec2 g = clothGrad(position, clothPh()) * clothAmp() * cw;',
+          '  float sgn = objectNormal.z >= 0.0 ? 1.0 : -1.0;',
+          '  objectNormal = normalize(objectNormal + vec3(-g.x, -g.y, 0.0) * sgn); }'
+        ].join('\n'))
+        .replace('#include <begin_vertex>', [
+          '#include <begin_vertex>',
+          '{ float cw = clothW(position); float tt = clamp(-position.y / uH, 0.0, 1.0); float ph = clothPh();',
+          '  transformed.z += clothWave(position, ph) * clothAmp() * cw;',
+          '  transformed.x += (-uVel * 0.045 + sin(uTime * 1.1 + uPhase + tt * 2.5) * 0.004) * cw;',
+          '  transformed.y -= abs(uVel) * 0.006 * cw; }'
+        ].join('\n'));
+      if (opts.alpha) {
+        sh.fragmentShader = 'uniform sampler2D silhouette;\nuniform float mirror;\n' + sh.fragmentShader.replace(
+          '#include <alphatest_fragment>',
+          'vec2 suv = vUv; if (mirror > 0.5) suv.x = 1.0 - suv.x;\n' +
+          'if (texture2D(silhouette, suv).a < 0.5) discard;\n#include <alphatest_fragment>');
+      }
+    };
+    m.customProgramCacheKey = function () { return 'cloth' + (opts.alpha ? '-photo' : '-plain'); };
+    return m;
   }
 
   /* ---------------- hanger & price tag ---------------- */
@@ -248,62 +284,94 @@
     return pivot;
   }
 
-  /* Garment on its hanger. Origin = top of the hook. Returns a group whose userData.ready resolves when built. */
+  /* Garment on its hanger. Origin = top of the hook (where it sits on the rail).
+     body (swings on the rail)
+       ├─ hangerObj (hanger, or clip hanger for trousers and skirts)
+       └─ cloth (the garment mesh + price tag; can be lifted off the hanger)
+     userData.ready resolves when built. */
   function garment(product, opts) {
     opts = opts || {};
     var root = new THREE.Group();
     var body = new THREE.Group();
     body.position.y = -0.1;
     root.add(body);
-    root.userData = { product: product, body: body, phase: Math.random() * 6, swing: 0, vel: 0 };
+    var cloth = new THREE.Group();
+    root.userData = { product: product, body: body, cloth: cloth, phase: Math.random() * 6, swing: 0, vel: 0, mats: [], flutter: 0 };
     var kind = product.kind || 'tshirt';
     var finish = function (geo, mats) {
       var m = new THREE.Mesh(geo, mats);
       m.castShadow = true;
       m.receiveShadow = true;
       m.userData.garmentRoot = root;
-      body.add(m);
+      cloth.add(m);
       root.userData.mesh = m;
-      if (kind !== 'jeans' && kind !== 'skirt') body.add(hanger());
+      root.userData.mats = mats;
+      var h;
+      if (kind !== 'jeans' && kind !== 'skirt') h = hanger();
       else {
+        h = hanger();
+        h.children[0].visible = false; h.children[1].visible = false; h.children[2].visible = false;
         var clip = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.022, 0.03), mat('#dcc6a6', 0.5));
         clip.position.y = 0.008;
-        body.add(clip);
-        var hk = hanger(); hk.children[0].visible = false; hk.children[1].visible = false; hk.children[2].visible = false;
-        body.add(hk);
+        clip.castShadow = true;
+        h.add(clip);
       }
+      body.add(h);
+      root.userData.hangerObj = h;
+      body.add(cloth);
       if (opts.tag !== false) {
         var tag = priceTag(product.price, product.size, opts.tagScale);
         var w = geo.userData.width;
         tag.position.set(w * 0.3, -0.1, (product.real ? 0.04 : 0.03) + 0.025);
         tag.rotation.z = 0.08;
-        body.add(tag);
+        cloth.add(tag);
         root.userData.tag = tag;
       }
       return root;
     };
     if (product.real) {
-      root.userData.ready = photoAssets(product).then(function (a) { return finish(a.geo, a.mats); });
+      root.userData.ready = photoAssets(product).then(function (a) {
+        var H = a.geo.userData.height;
+        return finish(a.geo, [
+          clothMaterial({ map: a.front, alpha: a.alpha, mirror: 0, photo: true, height: H }),
+          clothMaterial({ map: a.back, alpha: a.alpha, mirror: 1, photo: true, height: H })
+        ]);
+      });
     } else {
       var A = placeholderAssets(kind);
-      if (!A.mats[product.color]) {
-        var m = new THREE.MeshStandardMaterial({ map: A.map, color: product.color, roughness: 0.9, alphaTest: 0.5 });
-        A.mats[product.color] = [m, m];
-      }
-      finish(A.geo, A.mats[product.color]);
+      var H = A.geo.userData.height;
+      var cm = clothMaterial({ map: A.map, color: product.color, height: H });
+      finish(A.geo, [cm, cm]);
       root.userData.ready = Promise.resolve(root);
     }
     return root;
   }
 
-  /* swing the garment and its tag from a sideways velocity (hangers sliding on a rail) */
-  function swing(root, dt, push, t) {
+  /* hide or show the garment, leaving the hanger (an empty hanger keeps swinging) */
+  function setEmpty(root, empty) {
+    var c = root.userData.cloth;
+    if (c && c.parent === root.userData.body) c.visible = !empty;
+  }
+  function kick(root, v) { root.userData.vel += v; }
+
+  /* swing the hanger on the rail (a damped pendulum) and let the fabric follow */
+  function swing(root, dt, push, t, turn) {
     var u = root.userData;
-    u.vel += (-u.swing * 38 - u.vel * 5.5 + (push || 0)) * dt;
+    var breeze = Math.sin(t * 0.45 + u.phase * 2.1) * 0.45;   // a little air moving through the shop
+    u.vel += (-u.swing * 38 - u.vel * 4.2 + (push || 0) + breeze) * dt;
     u.swing += u.vel * dt;
     var idle = Math.sin(t * 0.8 + u.phase) * 0.012;
     u.body.rotation.z = u.swing + idle;
     u.body.rotation.x = Math.sin(t * 0.6 + u.phase * 1.3) * 0.01 + Math.abs(u.swing) * 0.15;
+    u.flutter = Math.max(0, (u.flutter || 0) - dt * 0.8);
+    var v = u.vel * 0.9 + (turn || 0);
+    for (var i = 0; i < u.mats.length; i++) {
+      var U = u.mats[i].userData.u;
+      if (!U) continue;
+      U.uTime.value = t;
+      U.uVel.value += (v - U.uVel.value) * Math.min(1, dt * 6);
+      U.uFlutter.value = u.flutter;
+    }
     if (u.tag) {
       var tg = u.tag.userData;
       tg.vel += (-tg.swing * 30 - tg.vel * 3.2 - u.vel * 0.9) * dt;
@@ -419,5 +487,5 @@
     if (r.userData.label) r.userData.label.position.y = 2.15 + Math.sin(this.t * 2.2) * 0.04;
   };
 
-  window.FIG = { mat: mat, garment: garment, swing: swing, priceTag: priceTag, hanger: hanger, person: person, Walker: Walker, photoAssets: photoAssets };
+  window.FIG = { mat: mat, garment: garment, swing: swing, setEmpty: setEmpty, kick: kick, priceTag: priceTag, hanger: hanger, person: person, Walker: Walker, photoAssets: photoAssets };
 })();

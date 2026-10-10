@@ -12,6 +12,7 @@ Magazin second-hand online, construit ca o experiență 3D: intri pe ușă, te p
 - [x] **Vizitatori live:** câte o siluetă pentru fiecare om de pe site, care merge la raftul la care se uită (în preview-ul de pe claude.ai, prin capabilitatea `room`).
 - [x] **Casa de marcat:** bon cu produsele, alegerea livrării (curier / easybox, gratuit peste 250 lei), plată cu cardul (card animat, doar vizual) sau ramburs cu factură proformă pentru datele de livrare, bon tipărit la final.
 - [x] **Haine de test** pe toate rafturile (vezi `assets/demo/README.md`), cu întoarcere față–spate în loc de rotire liberă.
+- [x] **Haine „vii”:** materialul se mișcă pe umeraș (falduri care se unduiesc, tivul rămâne în urmă când umerașul se leagănă, puțin aer prin magazin). Când tragi haina în coș, cade doar haina; umerașul gol rămâne pe bară și se leagănă, apoi celelalte haine alunecă să umple locul.
 - [ ] Rezervare în timp real pe server (produsul dispare pentru toți cât e în coș, max. 12 ore) + vizitatori live pe site-ul public
 - [ ] Panou pentru adăugarea produselor reale
 
