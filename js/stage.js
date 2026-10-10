@@ -74,12 +74,12 @@
     resize();
     if (root) { scene.remove(root); root = null; }
     if (loose) { scene.remove(loose); loose = null; }
-    rot.y = -0.5; rot.vel = 0; rot.face = 0; rot.target = 0; rot.tilt = 0; intro = 0; dropping = null; carry = null;
+    rot.y = -0.9; rot.vel = 0; rot.face = 0; rot.target = 0; rot.tilt = 0; rot.spin = 0; intro = 0; dropping = null; carry = null;
     var two = hasBack(p);
-    el.faces.hidden = !two;
+    el.faces.hidden = false;
     setFaceUI();
-    el.hint.innerHTML = two ? 'Trage stânga–dreapta ca s-o întorci pe spate<br>sau trage-o în jos, în coș' : 'Trage stânga–dreapta ca s-o înclini<br>sau trage-o în jos, în coș';
-    var g = FIG.garment(p, { tagScale: 1.25 });
+    el.hint.innerHTML = 'Trage stânga–dreapta ca s-o rotești 360°<br>sau trage-o în jos, în coș';
+    var g = FIG.garment(p, { tagScale: 1.25, volume: true, res: 110 });
     g.visible = false;
     root = g;
     scene.add(g);
@@ -151,11 +151,19 @@
     el.fBack.setAttribute('aria-pressed', rot.face === 1);
   }
   function flip(toFace, dir) {
-    if (!product || !hasBack(product) || toFace === rot.face) return;
+    if (!product) return;
+    var base = toFace * Math.PI, k = Math.round((rot.target - base) / (Math.PI * 2));
+    var to = base + k * Math.PI * 2;
+    if (Math.abs(to - rot.target) < 0.01 && toFace !== rot.face) to += (dir || 1) * Math.PI * 2;
+    rot.target = to;
+    rot.spin = 0;
     rot.face = toFace;
-    rot.target += Math.PI * (dir || 1);
     setFaceUI();
     hideHint();
+  }
+  function faceFromAngle() {
+    var f = Math.cos(rot.target) >= 0 ? 0 : 1;
+    if (f !== rot.face) { rot.face = f; setFaceUI(); }
   }
 
   function updateBasket() {
@@ -174,7 +182,13 @@
       var e = 1 - Math.pow(1 - intro, 3);
       {
         // spring towards the shown face plus a little tilt; never rests edge-on
-        var sway = rot.dragging || reduce ? 0 : Math.sin(t * 0.7) * 0.1 * Math.min(1, intro * 2);
+        if (!rot.dragging && rot.spin) {                 // free 360° spin with inertia
+          rot.target += rot.spin * dt;
+          rot.spin *= Math.pow(0.06, dt);
+          if (Math.abs(rot.spin) < 0.02) rot.spin = 0;
+          faceFromAngle();
+        }
+        var sway = rot.dragging || reduce || rot.spin ? 0 : Math.sin(t * 0.7) * 0.08 * Math.min(1, intro * 2);
         var goal = rot.target + rot.tilt + sway;
         var prevY = rot.y;
         rot.vel += ((goal - rot.y) * 60 - rot.vel * 12) * dt;
@@ -244,11 +258,13 @@
         hideHint();
       }
       if (drag.mode === 'rotate') {
-        var raw = (e.clientX - drag.x) * 0.006;
-        // rubber band past the tilt limit
-        rot.tilt = Math.abs(raw) <= TILT * 0.7 ? raw : Math.sign(raw) * (TILT * 0.7 + (TILT * 0.3) * (1 - Math.exp(-(Math.abs(raw) - TILT * 0.7) / (TILT * 0.3))));
+        if (drag.base === undefined) { drag.base = rot.target; rot.spin = 0; }
+        var now2 = performance.now(), ddx = e.clientX - drag.lx;
+        rot.target = drag.base + (e.clientX - drag.x) * 0.011;
+        drag.v = (drag.v || 0) * 0.5 + (ddx * 0.011) / Math.max(0.008, (now2 - drag.lt) / 1000) * 0.5;
         rot.dragging = true;
-        drag.lx = e.clientX; drag.lt = performance.now();
+        faceFromAngle();
+        drag.lx = e.clientX; drag.lt = now2;
       } else if (drag.mode === 'carry') {
         var w = worldAt(e.clientX, e.clientY);
         var body = root.userData.body, cl = root.userData.cloth;
@@ -265,9 +281,8 @@
       var d = drag; drag = null;
       rot.dragging = false;
       if (d.mode === 'rotate') {
-        var tl = rot.tilt;
         rot.tilt = 0;
-        if (Math.abs(tl) > FLIP_AT && product && hasBack(product)) flip(1 - rot.face, tl > 0 ? 1 : -1);
+        if (performance.now() - d.lt < 120) rot.spin = Math.max(-9, Math.min(9, d.v || 0));
       }
       if (d.mode === 'carry') {
         var b = basketRect();
@@ -297,7 +312,7 @@
         return;
       }
       if (open && e.key === 'Escape' && api.onBack) api.onBack();
-      if (open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { if (hasBack(product)) flip(1 - rot.face, e.key === 'ArrowLeft' ? -1 : 1); else rot.vel += e.key === 'ArrowLeft' ? -3 : 3; hideHint(); }
+      if (open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { rot.spin = 0; rot.target += (e.key === 'ArrowLeft' ? -1 : 1) * Math.PI / 4; faceFromAngle(); hideHint(); }
     });
     bindZoom();
   }
@@ -428,6 +443,7 @@
     }, { passive: false });
   }
 
+  window.__stageRot = rot;
   window.STAGE = {
     show: show,
     hide: hide,

@@ -180,6 +180,70 @@
     return { a: a, b: b, half: Math.max(0.045, half - 0.025) };
   }
 
+  /* "Ghost mannequin" volume: the cut-out photo is inflated into a rounded 3D shape (like a garment
+     with an invisible body inside). Each point is raised by its distance to the outline: a round rim
+     near the edge (so the sides look like fabric wrapping round, not a paper edge) plus a gentle
+     chest/back bulge in the middle. Front photo on the front, back photo on the back. */
+  function volumeGeometry(src, width, opts) {
+    opts = opts || {};
+    var sw = 140, sh = Math.round(src.height * sw / src.width);
+    var c = TX.canvas(sw, sh), g = c.getContext('2d');
+    g.drawImage(src, 0, 0, sw, sh);
+    var data = g.getImageData(0, 0, sw, sh).data;
+    var D = new Float32Array(sw * sh), INF = 1e6, x, y, i;
+    for (i = 0; i < sw * sh; i++) D[i] = data[i * 4 + 3] > 127 ? INF : 0;
+    function at(xx, yy) { return xx < 0 || yy < 0 || xx >= sw || yy >= sh ? 0 : D[yy * sw + xx]; }
+    for (y = 0; y < sh; y++) for (x = 0; x < sw; x++) {
+      i = y * sw + x; if (!D[i]) continue;
+      D[i] = Math.min(D[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1.414, at(x + 1, y - 1) + 1.414);
+    }
+    for (y = sh - 1; y >= 0; y--) for (x = sw - 1; x >= 0; x--) {
+      i = y * sw + x; if (!D[i]) continue;
+      D[i] = Math.min(D[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1.414, at(x - 1, y + 1) + 1.414);
+    }
+    var mpp = width / sw, dmax = 0;
+    for (i = 0; i < D.length; i++) { D[i] *= mpp; if (D[i] > dmax) dmax = D[i]; }
+    function dist(u, v) {                       // bilinear sample, metres
+      var fx = u * (sw - 1), fy = v * (sh - 1), x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+      var a00 = at(x0, y0), a10 = at(x0 + 1, y0), a01 = at(x0, y0 + 1), a11 = at(x0 + 1, y0 + 1);
+      return (a00 * (1 - tx) + a10 * tx) * (1 - ty) + (a01 * (1 - tx) + a11 * tx) * ty;
+    }
+    var aspect = src.height / src.width, height = width * aspect;
+    var R = opts.round || 0.05, bulge = opts.bulge == null ? 0.035 : opts.bulge;
+    var res = opts.res || 110, nx = res, ny = Math.round(res * aspect);
+    var verts = [], uvs = [];
+    for (var side = 0; side < 2; side++) {
+      for (var j = 0; j <= ny; j++) {
+        for (var k = 0; k <= nx; k++) {
+          var u = k / nx, v = j / ny, dd = dist(u, v);
+          var e = Math.min(dd, R) / R;
+          var rim = R * (1 - (1 - e) * (1 - e));         // soft rounded edge (no vertical wall)
+          var body = bulge * Math.pow(Math.min(1, dd / Math.max(dmax, 0.01)), 0.8);
+          var h = rim * 0.85 + body;
+          var px = -width / 2 + u * width, py = -v * height;
+          verts.push(px, py, (side ? -h * 0.9 : h) - px * px * BEND * 0.5);
+          uvs.push(side ? 1 - u : u, 1 - v);
+        }
+      }
+    }
+    var row = nx + 1, off = row * (ny + 1), front = [], back = [];
+    for (var jj = 0; jj < ny; jj++) for (var ii = 0; ii < nx; ii++) {
+      var a0 = jj * row + ii, b0 = a0 + 1, c0 = a0 + row, d0 = c0 + 1;
+      front.push(a0, c0, b0, b0, c0, d0);
+      back.push(off + a0, off + b0, off + c0, off + b0, off + d0, off + c0);
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(front.concat(back));
+    geo.addGroup(0, front.length, 0);
+    geo.addGroup(front.length, back.length, 1);
+    geo.computeVertexNormals();
+    var inside = function (uu, vv) { return dist(uu, vv) > 0.004 ? 1 : 0; };
+    geo.userData = { width: width, height: height, shoulder: shoulderFit(inside, width, height), volume: true };
+    return geo;
+  }
+
   var GEO = {};
   function placeholderAssets(kind) {
     if (GEO[kind]) return GEO[kind];
@@ -215,13 +279,16 @@
       im.src = src;
     });
   }
-  var PHOTO = {};
+  var PHOTO = {}, VOL = {};
   function photoAssets(product) {
     if (PHOTO[product.id]) return PHOTO[product.id];
     PHOTO[product.id] = Promise.all([loadImage(product.texture.front), product.texture.back ? loadImage(product.texture.back) : null]).then(function (ims) {
       var f = photoCanvas(ims[0]), b = ims[1] ? photoCanvas(ims[1]) : f;
       var geo = pillowGeometry(f.alpha, product.texture.width, 0.045);
-      return { geo: geo, front: TX.tex(f.filled), back: TX.tex(b.filled), alpha: TX.tex(f.alpha) };
+      var dil = TX.canvas(f.alpha.width, f.alpha.height), dg = dil.getContext('2d');
+      var rpx = Math.max(2, Math.round(f.alpha.width / 140 * 1.6));
+      for (var ox = -rpx; ox <= rpx; ox++) for (var oy = -rpx; oy <= rpx; oy++) if (ox * ox + oy * oy <= rpx * rpx) dg.drawImage(f.alpha, ox, oy);
+      return { geo: geo, front: TX.tex(f.filled), back: TX.tex(b.filled), alpha: TX.tex(f.alpha), alphaDil: TX.tex(dil), alphaCanvas: f.alpha, width: product.texture.width };
     });
     return PHOTO[product.id];
   }
@@ -377,7 +444,7 @@
         var tag = priceTag(product.price, product.size, opts.tagScale);
         var w = geo.userData.width, tx = Math.min(w * 0.28, fit.half * 0.85);
         var ty = clipKind ? -0.01 : 0.012 + fit.b * tx * tx - 0.03;
-        tag.position.set(tx, ty, 0.055 - tx * tx * BEND);
+        tag.position.set(tx, ty, (geo.userData.volume ? 0.1 : 0.055) - tx * tx * BEND);
         tag.rotation.z = 0.08;
         cloth.add(tag);
         root.userData.tag = tag;
@@ -386,10 +453,17 @@
     };
     if (product.real) {
       root.userData.ready = photoAssets(product).then(function (a) {
-        var H = a.geo.userData.height;
-        return finish(a.geo, [
-          clothMaterial({ map: a.front, alpha: a.alpha, mirror: 0, photo: true, height: H }),
-          clothMaterial({ map: a.back, alpha: a.alpha, mirror: 1, photo: true, height: H })
+        var geo = a.geo;
+        if (opts.volume !== false) {
+          var res = opts.res || 56, VK = product.id + '|vol|' + res;
+          VOL[VK] = VOL[VK] || volumeGeometry(a.alphaCanvas, a.width, { res: res, round: 0.07, bulge: product.kind === 'jeans' || product.kind === 'skirt' ? 0.02 : 0.035 });
+          geo = VOL[VK];
+          root.userData.volume = true;
+        }
+        var H = geo.userData.height, al = geo.userData.volume ? a.alphaDil : a.alpha;
+        return finish(geo, [
+          clothMaterial({ map: a.front, alpha: al, mirror: 0, photo: true, height: H }),
+          clothMaterial({ map: a.back, alpha: al, mirror: 1, photo: true, height: H })
         ]);
       });
     } else {
